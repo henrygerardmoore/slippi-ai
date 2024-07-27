@@ -270,9 +270,10 @@ def run_parsing(
   else:
     slp_meta = []
 
-  by_md5 = {row['slp_md5']: row for row in slp_meta}
+  by_md5 = {row['slp_md5']: row for row in slp_meta if row['valid']}
   for result in results:
-    by_md5[result['slp_md5']] = result
+    if result['valid']:
+      by_md5[result['slp_md5']] = result
 
   with open(os.path.join(root, 'parsed.pkl'), 'wb') as f:
     pickle.dump(list(by_md5.values()), f)

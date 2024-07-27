@@ -4,6 +4,7 @@ import itertools
 import json
 import multiprocessing as mp
 import os
+import pickle
 import random
 from typing import (
     Any, Callable, Iterable, List, Optional, Set, Tuple, Iterator, NamedTuple,
@@ -32,7 +33,7 @@ class PlayerMeta(NamedTuple):
     if netplay is None:
       name = player_meta['name_tag']
     else:
-      name = netplay['name']
+      name = netplay.name
     return cls(
         character=player_meta['character'],
         name=name)
@@ -89,25 +90,27 @@ def _charset(chars: Optional[Iterable[melee.Character]]) -> Set[int]:
 
 @dataclasses.dataclass
 class DatasetConfig:
-  data_dir: Optional[str] = None  # required
-  meta_path: Optional[str] = None
+  data_dir: Optional[str] = "/home/henry/projects/slippi-ai/data/henry_slippi/Parsed"  # required
+  meta_path: Optional[str] = "/home/henry/projects/slippi-ai/data/henry_slippi/parsed.pkl"
   test_ratio: float = 0.1
   # comma-separated lists of characters, or "all"
-  allowed_characters: str = 'all'
-  allowed_opponents: str = 'all'
+  allowed_characters: str = 'fox'
+  allowed_opponents: str = 'fox'
   seed: int = 0
 
 
 def replays_from_meta(config: DatasetConfig) -> List[ReplayInfo]:
   replays = []
 
-  with open(config.meta_path) as f:
-    meta_rows: list[dict] = json.load(f)
+  with open(config.meta_path, 'rb') as f:
+    meta_rows: list[dict] = pickle.load(f)
 
   allowed_characters = _charset(chars_from_string(config.allowed_characters))
   allowed_opponents = _charset(chars_from_string(config.allowed_opponents))
 
   for row in meta_rows:
+    if not row['valid']:
+      continue
     replay_meta = ReplayMeta.from_metadata(row)
 
     c0 = replay_meta.p0.character
@@ -135,6 +138,14 @@ def train_test_split(
 
     # check that we have the right metadata
     filenames_set = set(filenames)
+    to_remove = []
+    for i in range(0, len(replays)):
+      info = replays[i]
+      if not info.meta.slp_md5 in filenames_set:
+        to_remove.append(i)
+    
+    for ind in sorted(to_remove, reverse=True):
+      del replays[ind]
     assert all(info.meta.slp_md5 in filenames_set for info in replays)
   else:
     if not (config.allowed_characters == 'all'

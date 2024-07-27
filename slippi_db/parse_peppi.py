@@ -35,56 +35,55 @@ def to_libmelee_stick(raw_stick: np.ndarray) -> np.ndarray:
 
 def get_stick(stick) -> types.Stick:
   return types.Stick(
-      x=to_libmelee_stick(stick.field('x').to_numpy()),
-      y=to_libmelee_stick(stick.field('y').to_numpy()),
+      x=to_libmelee_stick(stick.x.to_numpy()),
+      y=to_libmelee_stick(stick.y.to_numpy()),
   )
 
 def get_player(player: pa.StructArray) -> types.Player:
-  leader = player.field('leader')
+  leader = player.leader
 
-  post = leader.field('post')
-  get_post = lambda key: post.field(key)
-  position = post.field('position')
-  pre = leader.field('pre')
+  post = leader.post
+  position = post.position
+  pre = leader.pre
 
   return types.Player(
-      percent=np.asarray(get_post('percent'), dtype=np.uint16),
-      facing=get_post('direction').to_numpy() > 0,
-      x=position.field('x'),
-      y=position.field('y'),
-      action=get_post('state'),
+      percent=np.asarray(post.percent, dtype=np.uint16),
+      facing=post.direction.to_numpy() > 0,
+      x=position.x,
+      y=position.y,
+      action=post.state,
       # libmelee does extra processing to determine invulnerability
-      invulnerable=get_post('hurtbox_state').to_numpy() != 0,
-      character=get_post('character'),  # uint8
-      jumps_left=get_post('jumps'),  # uint8
-      shield_strength=get_post('shield'),  # float
+      invulnerable=post.hurtbox_state.to_numpy() != 0,
+      character=post.character,  # uint8
+      jumps_left=post.jumps,  # uint8
+      shield_strength=post.shield,  # float
       controller=types.Controller(
-          main_stick=get_stick(pre.field('joystick')),
-          c_stick=get_stick(pre.field('cstick')),
+          main_stick=get_stick(pre.joystick),
+          c_stick=get_stick(pre.cstick),
           # libmelee reads the logical value and assigns it to both l/r
-          shoulder=pre.field('triggers'),
-          buttons=get_buttons(pre.field('buttons_physical')),
+          shoulder=pre.triggers,
+          buttons=get_buttons(pre.buttons_physical),
       ),
       on_ground=np.logical_not(
-          post.field('airborne').to_numpy(zero_copy_only=False)),
+          post.airborne.to_numpy(zero_copy_only=False)),
   )
 
 def from_peppi(game: peppi_py.Game) -> types.GAME_TYPE:
   frames = game.frames
 
   players = {}
-  port_names = sorted(p['port'] for p in game.start['players'])
-  ports_data = frames.field('ports')
-  for i, port_name in enumerate(port_names):
-    players[f'p{i}'] = get_player(ports_data.field(port_name))
+  port_names = sorted(p.port for p in game.start.players)
+  ports_data = frames.ports
+  for i in enumerate(port_names):
+    players[f'p{i[0]}'] = get_player(ports_data[port_names[i[0]]])
 
-  stage = melee.enums.to_internal_stage(game.start['stage'])
-  stage = np.full([len(frames)], stage.value, dtype=np.uint8)
+  stage = melee.enums.to_internal_stage(game.start.stage)
+  stage = np.full([len(frames.id)], stage.value, dtype=np.uint8)
 
   game = types.Game(stage=stage, **players)
   game_array = types.array_from_nt(game)
 
-  index = frames.field('id').to_numpy()
+  index = frames.id.to_numpy()
   first_indices = []
   next_idx = -123
   for i, idx in enumerate(index):
